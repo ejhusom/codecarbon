@@ -16,10 +16,7 @@ from plotly.subplots import make_subplots
 # ******************************************************************************
 # colors
 
-darkgreen = '#024758'
-vividgreen = '#c9fb37'
-color3 = '#226a7a'
-titleColor = '#d8d8d8'
+
 
 darkgreen = "#024758"
 vividgreen = "#c9fb37"
