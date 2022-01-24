@@ -1,4 +1,5 @@
 from datetime import date
+
 import CodeCarbon_template
 import dash
 import dash_bootstrap_components as dbc
@@ -9,6 +10,7 @@ import plotly.graph_objects as go
 from dash import dcc, html
 from dash.dependencies import Input, Output
 from plotly.subplots import make_subplots
+
 # Common variables
 # ******************************************************************************
 # colors
@@ -239,20 +241,23 @@ app.layout = dbc.Container(
         dbc.Row(
             [
                 # holding pieCharts
-                dbc.Col(dbc.Spinner(
-                    dcc.Graph(id="pieCharts", config=config))
-                    # dbc.CardGroup([
-                    #     dbc.Card(
-                    #         dcc.Graph(id='pieChartEnergy', config=config), color=darkgreen
-                    #             ),
-                    #     dbc.Card(
-                    #         dcc.Graph(id='pieChartEmissions', config=config), color=darkgreen
-                    #             ),
-                    #     dbc.Card(
-                    #         dcc.Graph(id='pieChartDuration', config=config) , color=darkgreen
-                    #             )
-                    #             ])
-                ),
+                dbc.Col(
+                    # dbc.Spinner(
+                    dcc.Graph(id="pieCharts", config=config)
+                )
+                # dbc.CardGroup([
+                #     dbc.Card(
+                #         dcc.Graph(id='pieChartEnergy', config=config), color=darkgreen
+                #             ),
+                #     dbc.Card(
+                #         dcc.Graph(id='pieChartEmissions', config=config), color=darkgreen
+                #             ),
+                #     dbc.Card(
+                #         dcc.Graph(id='pieChartDuration', config=config) , color=darkgreen
+                #             )
+                #             ])
+                # )
+                ,
                 dbc.Col(
                     [
                         dbc.CardGroup([card_household, card_car, card_tv]),
@@ -274,18 +279,26 @@ app.layout = dbc.Container(
         dbc.Row(
             [
                 # holding bubble chart
-                dbc.Col(dbc.Spinner(
+                dbc.Col(  # dbc.Spinner(
                     dcc.Graph(
                         id="bubbleChart",
                         clickData=None,
                         hoverData=None,
                         figure={},
                         config=config,
-                    )),
+                        # )
+                    ),
                     width=6,
                 ),
                 # holding line chart
-                dbc.Col(dbc.Spinner(dcc.Graph(id="lineChart", config=config)), width=6),
+                dbc.Col(  # dbc.Spinner(
+                    dcc.Graph(
+                        id="lineChart",
+                        config=config
+                        # )
+                    ),
+                    width=6,
+                ),
             ]
         ),
         # holding carbon emission map
@@ -293,23 +306,29 @@ app.layout = dbc.Container(
         dcc.Dropdown(
             id="slct_kpi",
             options=[
-                {"label": "CO2_Emission", "value": "CO2_Emission"},
-                {"label": "CO2_TempRatio", "value": "CO2_TempRatio"},
-                {"label": "Country_EnergyMix", "value": "Country_EnergyMix"},
+                {
+                    "label": "Global Carbon Intensity",
+                    "value": "Global Carbon Intensity",
+                },
+                {"label": "My Carbon Emissions", "value": "My Carbon Emissions"},
             ],
             multi=False,
-            value="CO2_Emission",
-            style={"width": "40%", "color":"black"},
-            clearable=False
+            value="Global Carbon Intensity",
+            style={"width": "50%", "color": "black"},
+            clearable=False,
         ),
         html.Div(id="output_container", children=[]),
-        dbc.Spinner(dcc.Graph(id="my_emission_map", figure={}, config=config)),
+        # dbc.Spinner(
+        dcc.Graph(id="my_emission_map", figure={}, config=config)
+        # ),
     ]
 )
 # callback section: connecting the components
 # ************************************************************************
 # indicators
 # -------------------------------------------------------------------------
+
+
 @app.callback(
     [
         Output(component_id="Tot_Energy_Consumed", component_property="children"),
@@ -342,6 +361,8 @@ def update_indicator(start_date, end_date):
             tot_duration = str(tot_duration_days)
             tot_duration_unit = "days"
     return Tot_energy_consumed, Tot_emissions, tot_duration, tot_duration_unit
+
+
 # pieCharts and cards
 # -----------------------------------------------------------------------------------
 @app.callback(
@@ -529,6 +550,8 @@ def update_Charts(start_date, end_date, project):
         showgrid=False, showline=True, linewidth=2, linecolor="white", title=""
     )
     return figBar, figPie, houseHold, car, tvTime
+
+
 # BubbleCharts
 # ---------------------------------------------------------------------------------------
 @app.callback(
@@ -587,6 +610,8 @@ def uppdate_bubblechart(clickPoint, start_date, end_date, project):
         colorbar_title_side="right", colorbar_title_text="energy consumed (KwH)"
     )
     return bubble
+
+
 # Line Chart
 # ---------------------------------------------------------------------------------
 @app.callback(
@@ -635,6 +660,8 @@ def uppdate_linechart(clickPoint, start_date, end_date, experiment_clickPoint, p
     )
     line.update_yaxes(showgrid=False, visible=False, title="emissions (kg eq. C02)")
     return line
+
+
 # Carbon Emission Map
 # ---------------------------------------------------------------------------------
 @app.callback(
@@ -656,14 +683,13 @@ def update_map(start_date, end_date, project, kpi):
     dff = dff.groupby(["project_name", "country_iso_code", "country_name"]).agg(
         {"emissions_sum": "sum", "duration": "sum"}
     )
-    dff["ratio"] = dff["emissions_sum"] / dff["duration"] * 3600 * 24
+    #    dff["ratio"] = dff["emissions_sum"] / dff["duration"] * 3600 * 24
     dff = dff.reset_index()
-
     dff_mix = df_mix.copy()
 
     container = ""
     # Plotly Express
-    if kpi == "CO2_Emission":
+    if kpi == "My Carbon Emissions":
         fig = px.choropleth(
             data_frame=dff,
             locationmode="ISO-3",
@@ -671,37 +697,17 @@ def update_map(start_date, end_date, project, kpi):
             scope="world",
             color="emissions_sum",
             hover_data=["country_name", "emissions_sum", "project_name"],
-            color_continuous_scale=[darkgreen, vividgreen],
+            color_continuous_scale=[vividgreen, darkgreen],
             labels={"emissions_sum": "Carbon Emission"},
             template="CodeCarbonTemplate",
         )
         fig.update_coloraxes(
-        colorbar_title_side="right", colorbar_title_text="CO2 emissions"
+            colorbar_title_side="right", colorbar_title_text="CO2 emissions"
         )
         fig.update_geos(
-            showland=True, landcolor="#898381",
-            showocean=True, oceancolor="#759FA8"
-        )   
-    elif kpi == "CO2_TempRatio":
-        fig = px.choropleth(
-            data_frame=dff,
-            locationmode="ISO-3",
-            locations="country_iso_code",
-            scope="world",
-            color="ratio",
-            hover_data=["country_name", "ratio", "project_name"],
-            color_continuous_scale=[darkgreen, vividgreen],
-            labels={"ratio": "Carbon Temporal Ratio"},
-            template="CodeCarbonTemplate",
+            showland=True, landcolor="#898381", showocean=True, oceancolor="#759FA8"
         )
-        fig.update_coloraxes(
-        colorbar_title_side="right", colorbar_title_text="CO2 per H"
-        )
-        fig.update_geos(
-            showland=True, landcolor="#898381",
-            showocean=True, oceancolor="#759FA8"
-        )  
-    elif kpi == "Country_EnergyMix":
+    elif kpi == "Global Carbon Intensity":
         fig = px.choropleth(
             data_frame=dff_mix,
             locationmode="ISO-3",
@@ -720,21 +726,21 @@ def update_map(start_date, end_date, project, kpi):
                 "% Solar",
                 "% Wind",
             ],
-            color_continuous_scale=[darkgreen, vividgreen],
+            color_continuous_scale=px.colors.sequential.YlOrRd,
             labels={
-                "Carbon intensity of electricity (gCO2/kWh)": "Carbon intensity (gCO2/kWh)"
+                "Carbon intensity of electricity (gCO2/kWh)": "CO2 intensity (gCO2/kWh)"
             },
             template="CodeCarbonTemplate",
         )
         fig.update_coloraxes(
-        colorbar_title_side="right", colorbar_title_text="Carbon intensity (gCO2/KwH)"
+            colorbar_title_side="right", colorbar_title_text="CO2 intensity (gCO2/KwH)"
         )
         fig.update_geos(
-            showland=True, landcolor="#898381",
-            showocean=True, oceancolor="#759FA8"
-        )  
+            showland=True, landcolor="#898381", showocean=True, oceancolor="#759FA8"
+        )
 
     return container, fig
+
 
 if __name__ == "__main__":
     app.run_server(debug=True, use_reloader=False)

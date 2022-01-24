@@ -1,4 +1,5 @@
 from datetime import date
+
 import CodeCarbon_template
 import dash
 import dash_bootstrap_components as dbc
@@ -8,11 +9,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from dash import dcc, html
 from dash.dependencies import Input, Output
+from data.data import get_experiment_runs, get_project_experiments, get_run_emissions
 from plotly.subplots import make_subplots
 
-import requests
-import csv
-import json
 # Common variables
 # ******************************************************************************
 # colors
@@ -41,13 +40,10 @@ df = pd.read_csv(
 )
 df.timestamp = pd.to_datetime(df.timestamp)
 
-
-def load_emission(run_id, page) :
-    return f"https://api.codecarbon.io/emissions/run/{run_id}?token=jessica&page={page}&size=100"
-
 df_mix = pd.read_csv(
     "https://raw.githubusercontent.com/mlco2/codecarbon/dashboard/dashboard/WorldElectricityMix.csv"
 )
+
 # cards
 # ******************************************************************************
 card_household = dbc.Card(
@@ -230,10 +226,18 @@ app.layout = dbc.Container(
                     dcc.RadioItems(
                         id="projectPicked",
                         options=[
-                            {"label": projectName, "value": projectName}
-                            for projectName in df.project_name.unique()
+                            {"label": projectName, "value": projectId}
+                            for projectName, projectId in zip(
+                                df[["project_name", "project_id"]]
+                                .drop_duplicates()
+                                .iloc[:, 0],
+                                df[["project_name", "project_id"]]
+                                .drop_duplicates()
+                                .iloc[:, 1],
+                            )
+                            #                            for projectName, projectId in df[['project_name','project_id']].drop_duplicates().iteritems()
                         ],
-                        value=df.project_name.unique().tolist()[0],
+                        value=df.project_id.unique().tolist()[0],
                         labelStyle={"display": "inline"},
                         style={"padding-top": 10},
                         inputStyle={"margin-right": "10px", "margin-left": "10px"},
@@ -262,13 +266,15 @@ app.layout = dbc.Container(
                 dbc.Col(
                     [
                         dbc.CardGroup([card_household, card_car, card_tv]),
-                        dbc.Col(
-                            dcc.Graph(id="barChart", clickData=None, config=config)
-                        ),
+                        # dbc.Col(
+                        #    dcc.Graph(id="barChart", clickData=None, config=config)
+                        # ),
                     ]
                 ),
             ]
         ),
+        # holding barChart
+        dbc.Row([dbc.Col(dcc.Graph(id="barChart", clickData=None, config=config))]),
         # dbc.Row([
         #     # holding cards
         #                 dbc.Col(card_household, width={"size": 2, "offset": 0}),
@@ -299,13 +305,16 @@ app.layout = dbc.Container(
         dcc.Dropdown(
             id="slct_kpi",
             options=[
-                {"label": "CO2_Emission", "value": "CO2_Emission"},
-                {"label": "CO2_TempRatio", "value": "CO2_TempRatio"},
-                {"label": "Country_EnergyMix", "value": "Country_EnergyMix"},
+                {
+                    "label": "Global Carbon Intensity",
+                    "value": "Global Carbon Intensity",
+                },
+                {"label": "My Carbon Emissions", "value": "My Carbon Emissions"},
             ],
             multi=False,
-            value="CO2_Emission",
-            style={"width": "40%"},
+            value="Global Carbon Intensity",
+            style={"width": "50%", "color": "black"},
+            clearable=False,
         ),
         html.Div(id="output_container", children=[]),
         dcc.Graph(id="my_emission_map", figure={}, config=config),
@@ -315,6 +324,8 @@ app.layout = dbc.Container(
 # ************************************************************************
 # indicators
 # -------------------------------------------------------------------------
+
+
 @app.callback(
     [
         Output(component_id="Tot_Energy_Consumed", component_property="children"),
@@ -347,6 +358,8 @@ def update_indicator(start_date, end_date):
             tot_duration = str(tot_duration_days)
             tot_duration_unit = "days"
     return Tot_energy_consumed, Tot_emissions, tot_duration, tot_duration_unit
+
+
 # pieCharts and cards
 # -----------------------------------------------------------------------------------
 @app.callback(
@@ -369,9 +382,9 @@ def update_indicator(start_date, end_date):
 def update_Charts(start_date, end_date, project):
     dff = df.copy()
     dff = dff[dff["timestamp"] > start_date][dff["timestamp"] < end_date]
-    energyConsumed = dff[dff["project_name"] == project].energy_consumed.sum()
-    emission = dff[dff["project_name"] == project].emissions_sum.sum()
-    duration = dff[dff["project_name"] == project].duration.sum()
+    energyConsumed = dff[dff["project_id"] == project].energy_consumed.sum()
+    emission = dff[dff["project_id"] == project].emissions_sum.sum()
+    duration = dff[dff["project_id"] == project].duration.sum()
     # Cards
     # --------------------------------------------------------------
     houseHold = str(round(100 * emission / 160.58, 2)) + " %"
@@ -501,7 +514,7 @@ def update_Charts(start_date, end_date, project):
     # barChart
     # --------------------------------------------------------------------
     dfBar = (
-        dff[dff["project_name"] == project]
+        dff[dff["project_id"] == project]
         .groupby("experiment_name")
         .agg(
             {
@@ -516,8 +529,7 @@ def update_Charts(start_date, end_date, project):
     )
     figBar = px.bar(dfBar, x="experiment_name", y="emissions_sum", text="emissions_sum")
     figBar.update_layout(
-        title_text=project
-        + " experiments emissions <br><span style='font-size:0.6em'>click a bar to filter bubble chart below </span>",
+        title_text="Experiments emissions <br><span style='font-size:0.6em'>click a bar to filter bubble chart below </span>",
         template="CodeCarbonTemplate",
         width=500,
         height=300,
@@ -534,10 +546,15 @@ def update_Charts(start_date, end_date, project):
         showgrid=False, showline=True, linewidth=2, linecolor="white", title=""
     )
     return figBar, figPie, houseHold, car, tvTime
+
+
 # BubbleCharts
 # ---------------------------------------------------------------------------------------
 @app.callback(
-    Output(component_id="bubbleChart", component_property="figure"),
+    [
+        Output(component_id="bubbleChart", component_property="figure"),
+        Output(component_id="barChart", component_property="clickData"),
+    ],
     [
         Input(component_id="barChart", component_property="clickData"),
         Input(component_id="periode", component_property="start_date"),
@@ -549,11 +566,10 @@ def uppdate_bubblechart(clickPoint, start_date, end_date, project):
     dff = df.copy()
     dff = dff[dff["timestamp"] > start_date][dff["timestamp"] < end_date]
     if clickPoint is None:
-        experiment_name = dff[dff["project_name"] == project][
-            "experiment_name"
-        ].unique()[0]
+        experiment_name = get_project_experiments(project)["name"].iloc[-1]
     else:
         experiment_name = clickPoint["points"][0]["x"]
+
     df1 = (
         dff[dff["experiment_name"] == experiment_name]
         .groupby("run_id")
@@ -591,54 +607,42 @@ def uppdate_bubblechart(clickPoint, start_date, end_date, project):
     bubble.update_coloraxes(
         colorbar_title_side="right", colorbar_title_text="energy consumed (KwH)"
     )
-    return bubble
+    clickPoint = None
+    return bubble, clickPoint
+
+
 # Line Chart
 # ---------------------------------------------------------------------------------
 @app.callback(
-    Output(component_id="lineChart", component_property="figure"),
-    Input(component_id="bubbleChart", component_property="clickData"),
-    Input(component_id="periode", component_property="start_date"),
-    Input(component_id="periode", component_property="end_date"),
-    Input(component_id="barChart", component_property="clickData"),
-    Input(component_id="projectPicked", component_property="value"),
+    [
+        Output(component_id="lineChart", component_property="figure"),
+        Output(component_id="bubbleChart", component_property="clickData"),
+        #        Output(component_id="barChart", component_property="clickData"),
+    ],
+    [
+        Input(component_id="bubbleChart", component_property="clickData"),
+        Input(component_id="periode", component_property="start_date"),
+        Input(component_id="periode", component_property="end_date"),
+        Input(component_id="barChart", component_property="clickData"),
+        Input(component_id="projectPicked", component_property="value"),
+    ],
 )
 def uppdate_linechart(clickPoint, start_date, end_date, experiment_clickPoint, project):
-    dff = df.copy()
-    dff = dff[dff["timestamp"] > start_date][dff["timestamp"] < end_date]
-    if experiment_clickPoint is None:
-        default_experiment_name = dff[dff["project_name"] == project][
-            "experiment_name"
-        ].unique()[0]
-        run_name = dff[dff["experiment_name"] == default_experiment_name][
-            "run_id"
-        ].unique()[
-            -1
-        ]  # showing the last run of default project
+    #    => ADD TIMESTAMP FILTERING
+    if experiment_clickPoint is None and clickPoint is None:
+        default_experiment_id = get_project_experiments(project)["id"].iloc[-1]
+        run_name = get_experiment_runs(default_experiment_id)["id"].iloc[-1]
     elif clickPoint is None:
+        #    => GET EXPERIMENT_ID (NOT EXP_NAME)
         experiment_selected = experiment_clickPoint["points"][0]["x"]
-        run_name = dff[dff["experiment_name"] == experiment_selected][
-            "run_id"
-        ].unique()[0]
+        run_name = get_experiment_runs(experiment_selected)["id"].iloc[-1]
     else:
         run_name = clickPoint["points"][0]["customdata"]
 
-    url_login = load_emission(run_name,1)
-    client = requests.session()
-    response=client.get(url_login)
-    dic=response.json()["items"]
-    df_run = pd.DataFrame.from_dict(dic)
-    num_page = 2
-    while len(dic)!=0 :
-        url_login = load_emission(run_name, num_page)
-        client = requests.session()
-        response=client.get(url_login)
-        dic = response.json()["items"]
-        dft = pd.DataFrame.from_dict(dic)
-        df_run = df_run.append(dft)
-        num_page = num_page + 1
+    #   API integration to get emissions at "run level"
+    df_run, total_run = get_run_emissions(run_name)
 
     line = px.line(
-        
         df_run,
         x="timestamp",
         y="emissions_sum",
@@ -656,7 +660,11 @@ def uppdate_linechart(clickPoint, start_date, end_date, experiment_clickPoint, p
         showgrid=False, showline=True, linewidth=2, linecolor="white", title=""
     )
     line.update_yaxes(showgrid=False, visible=False, title="emissions (kg eq. C02)")
-    return line
+    clickPoint = None
+    #    experiment_clickPoint = None
+    return line, clickPoint  # , experiment_clickPoint
+
+
 # Carbon Emission Map
 # ---------------------------------------------------------------------------------
 @app.callback(
@@ -674,16 +682,16 @@ def uppdate_linechart(clickPoint, start_date, end_date, experiment_clickPoint, p
 def update_map(start_date, end_date, project, kpi):
     dff = df.copy()
     dff = dff[dff["timestamp"] > start_date][dff["timestamp"] < end_date]
-    dff = dff[dff["project_name"] == project]
+    dff = dff[dff["project_id"] == project]
     dff = dff.groupby(["project_name", "country_iso_code", "country_name"]).agg(
         {"emissions_sum": "sum", "duration": "sum"}
     )
-    dff["ratio"] = dff["emissions_sum"] / dff["duration"] * 3600 * 24
+    #    dff["ratio"] = dff["emissions_sum"] / dff["duration"] * 3600 * 24
     dff = dff.reset_index()
     dff_mix = df_mix.copy()
     container = ""
     # Plotly Express
-    if kpi == "CO2_Emission":
+    if kpi == "My Carbon Emissions":
         fig = px.choropleth(
             data_frame=dff,
             locationmode="ISO-3",
@@ -691,29 +699,21 @@ def update_map(start_date, end_date, project, kpi):
             scope="world",
             color="emissions_sum",
             hover_data=["country_name", "emissions_sum", "project_name"],
-            color_continuous_scale=px.colors.sequential.YlOrRd,
-            labels={"emissions_sum": "Carbon Emission"},
+            color_continuous_scale=[vividgreen, darkgreen],
+            labels={"emissions_sum": "CO2 emissions"},
             template="CodeCarbonTemplate",
         )
-    elif kpi == "CO2_TempRatio":
-        fig = px.choropleth(
-            data_frame=dff,
-            locationmode="ISO-3",
-            locations="country_iso_code",
-            scope="world",
-            color="ratio",
-            hover_data=["country_name", "ratio", "project_name"],
-            color_continuous_scale=px.colors.sequential.YlOrRd,
-            labels={"ratio": "Carbon Temporal Ratio"},
-            template="CodeCarbonTemplate",
+        fig.update_coloraxes(
+            colorbar_title_side="right", colorbar_title_text="CO2 emissions"
         )
-    elif kpi == "Country_EnergyMix":
+        fig.update_geos(
+            showland=True, landcolor="#898381", showocean=True, oceancolor="#759FA8"
+        )
+    elif kpi == "Global Carbon Intensity":
         fig = px.choropleth(
             data_frame=dff_mix,
             locationmode="ISO-3",
-            #            locations="Code",
             locations="ISO",
-            #            scope="europe",
             scope="world",
             color="Carbon intensity of electricity (gCO2/kWh)",
             hover_data=[
@@ -728,10 +728,18 @@ def update_map(start_date, end_date, project, kpi):
             ],
             color_continuous_scale=px.colors.sequential.YlOrRd,
             labels={
-                "Carbon intensity of electricity (gCO2/kWh)": "Carbon intensity (gCO2/kWh)"
+                "Carbon intensity of electricity (gCO2/kWh)": "CO2 intensity (gCO2/kWh)"
             },
             template="CodeCarbonTemplate",
         )
+        fig.update_coloraxes(
+            colorbar_title_side="right", colorbar_title_text="CO2 intensity (gCO2/KwH)"
+        )
+        fig.update_geos(
+            showland=True, landcolor="#898381", showocean=True, oceancolor="#759FA8"
+        )
     return container, fig
+
+
 if __name__ == "__main__":
     app.run_server(debug=True, use_reloader=False)
