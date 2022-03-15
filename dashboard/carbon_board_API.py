@@ -29,9 +29,9 @@ from plotly.subplots import make_subplots
 darkgreen = "#024758"
 vividgreen = "#c9fb37"
 color3 = "#226a7a"
-titleColor = "#d8d8d8"
+
 # config (prevent default plotly modebar to appears, disable zoom on figures, set a double click reset ~ not working that good IMO )
-config = {"displayModeBar": False, "scrollZoom": False, "doubleClick": "reset"}
+config = {"displayModeBar": True, "scrollZoom": False, "doubleClick": "reset", "displaylogo":False, "modeBarButtonsToRemove":["zoom","pan","select","zoomIn","zoomOut","autoScale","lasso2d"]}
 CodeCarbon_template
 # App
 # *******************************************************************************
@@ -85,8 +85,8 @@ app.layout = dbc.Container(
                         ],
                         value=df.id.unique().tolist()[0],
                         inline=True,
-#                        label_checked_class_name="text-primary",
-#                        input_checked_class_name="border border-primary bg-primary",
+                        label_checked_class_name="text-primary",
+                        input_checked_class_name="border border-primary bg-primary",
                     ),
                 ],
                 width={"size": 6, "offset": 4},
@@ -96,7 +96,7 @@ app.layout = dbc.Container(
             [
                 # holding pieCharts
                 dbc.Col(
-                    dcc.Graph(id="pieCharts", config=config)
+                    dbc.Spinner(dcc.Graph(id="pieCharts", config=config))
                     
                 ),
                 dbc.Col(
@@ -112,25 +112,26 @@ app.layout = dbc.Container(
         html.Div( # holding experiment related graph
         dbc.Row([dbc.Col(dcc.Graph(id="barChart", clickData=None, config=config)), # holding barChart
                 dbc.Col(
-                    dcc.Graph(
+                    dbc.Spinner(dcc.Graph(
                         id="bubbleChart",
                         clickData=None,
                         hoverData=None,
                         figure={},
                         config=config,
-                    ))
+                    )))
                     
             ]), className="shadow"),
         
+        html.Div( # holding run level graph
         dbc.Row(
             [
                 
                 # holding line chart
                 #dbc.Col(
-                    dcc.Graph(id="lineChart", config=config)
+                    dbc.Spinner(dcc.Graph(id="lineChart", config=config))
                     #, width=6),
             ]
-        ),
+        ),className="shadow"),
         # holding carbon emission map
         html.Br(),
         dcc.Dropdown(
@@ -313,11 +314,7 @@ def update_Charts(start_date, end_date, project):
         go.Pie(
             values=[energyConsumed, Total_orga_energy - energyConsumed],
             title="KwH",
-            title_position="bottom center",
-            textinfo="none",
-            hole=0.8,
-            marker=dict(colors=[vividgreen, color3]),
-            hoverinfo="skip",
+            
         ),
         row=1,
         col=1,
@@ -325,12 +322,7 @@ def update_Charts(start_date, end_date, project):
     figPie.add_trace(
         go.Pie(
             values=[emission, Total_orga_emission - emission],
-            textinfo="none",
-            hole=0.8,
-            marker=dict(colors=[vividgreen, color3]),
-            hoverinfo="skip",
             title="Kg eq.CO2",
-            title_position="bottom center",
         ),
         row=1,
         col=2,
@@ -338,38 +330,26 @@ def update_Charts(start_date, end_date, project):
     figPie.add_trace(
         go.Pie(
             values=[duration, (Total_orga_duration - duration)],
-            textinfo="none",
-            hole=0.8,
-            marker=dict(colors=[vividgreen, color3]),
-            hoverinfo="skip",
             title=duration_project_unit,
-            title_position="bottom center",
         ),
         row=1,
         col=3,
     )
     figPie.update_layout(
         template="CodeCarbonTemplate",
-        showlegend=False,
         annotations=[
             dict(
                 text=energy_project,
-                font=dict(
-                    color="white",
-                ),
                 x=0.15,
-                y=0.5,
+                y=0.45,
                 font_size=20,
                 showarrow=False,
             ),
-            dict(text=emissions_project, x=0.5, y=0.5, font_size=20, showarrow=False),
+            dict(text=emissions_project, x=0.5, y=0.45, font_size=20, showarrow=False),
             dict(
                 text=duration_project,
-                font=dict(
-                    color="white",
-                ),
                 x=0.85,
-                y=0.5,
+                y=0.45,
                 font_size=20,
                 showarrow=False,
             ),
@@ -543,7 +523,7 @@ def uppdate_linechart(clickPoint, start_date, end_date, experiment_clickPoint, p
     line.update_layout(
         title_text=run_name
         + "<br><span style='font-size:0.8em;color:gray' >emissions (kg eq. C02)</span>",
-        title_font_color=titleColor,
+        
         template="CodeCarbonTemplate",
     )
     line.update_xaxes(
@@ -620,7 +600,7 @@ def update_map(start_date, end_date, project, kpi):
                 "% Solar",
                 "% Wind",
             ],
-            color_continuous_scale=px.colors.sequential.YlOrRd,
+            color_continuous_scale=["#c9fb37","#024758",'#fb36c9'],
             labels={
                 "Carbon intensity of electricity (gCO2/kWh)": "CO2 intensity (gCO2/kWh)"
             },
@@ -630,7 +610,7 @@ def update_map(start_date, end_date, project, kpi):
             colorbar_title_side="right", colorbar_title_text="CO2 intensity (gCO2/KwH)"
         )
         fig.update_geos(
-            showland=True, landcolor="#898381", showocean=True, oceancolor="#759FA8"
+            showland=True, landcolor="#6f898e", showocean=True, oceancolor="#759FA8"
         )
     return container, fig
 
